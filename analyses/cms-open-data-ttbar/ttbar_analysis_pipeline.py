@@ -57,6 +57,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pyhf
 
+import awkward
+import vector
+vector.register_awkward()
+
 import utils  # contains code for bookkeeping and cosmetics, as well as some boilerplate
 
 logging.getLogger("cabinetry").setLevel(logging.INFO)
@@ -245,6 +249,11 @@ class TtbarAnalysis(processor.ProcessorABC):
             muons = muons[muon_reqs]
             jets = jets[jet_reqs]
 
+            # Avoid using NanoAOD mixins
+            # later "additions" of jets require a charge branch to be present
+            # Make lorentz vectors manually
+            jets = awkward.zip({field:jets[field] for field in jets.fields}, with_name="Momentum4D")
+
             if self.use_inference:
                 even = (events.event%2==0)  # whether events are even/odd
 
@@ -429,6 +438,14 @@ def get_query(source):
                                             and jet.pt > 25
                                             and abs(jet.eta) < 2.4)
                                             and jet.jetId == 6).Count() >= 1)
+    # Electrons, Muons, Jets etc inherit indirectly from the Candidate Mixin that requires the 
+    # presence of the (pt, eta, phi) AND the charge field
+    # https://github.com/scikit-hep/coffea/blob/master/src/coffea/nanoevents/methods/candidate.py#L55
+    # Avoid involvement of charge in lorentzvector calculations in the processor
+
+    # Event IDs must not be dropped: ["run", "luminosityBlock", "event"]
+    # https://github.com/scikit-hep/coffea/blob/master/src/coffea/nanoevents/schemas/nanoaod.py#L47
+    
     selection = cuts.Select(lambda h: {"Electron_pt": h.Electron_pt,
                                        "Electron_eta": h.Electron_eta,
                                        "Electron_phi": h.Electron_phi,
@@ -449,6 +466,8 @@ def get_query(source):
                                        "Jet_qgl": h.Jet_qgl,
                                        "Jet_btagCSVV2": h.Jet_btagCSVV2,
                                        "Jet_jetId": h.Jet_jetId,
+                                       "run":h.run,
+                                       "luminosityBlock":h.luminosityBlock,
                                        "event": h.event,
                                       })
     if USE_INFERENCE:
@@ -470,6 +489,9 @@ def get_query(source):
                                        "Jet_phi": h.Jet_phi,
                                        "Jet_btagCSVV2": h.Jet_btagCSVV2,
                                        "Jet_jetId": h.Jet_jetId,
+                                       "run":h.run,
+                                       "luminosityBlock":h.luminosityBlock,
+                                       "event": h.event,
                                       })
 
 def get_uproot_raw_query():
@@ -496,6 +518,9 @@ def get_uproot_raw_query():
                       'Jet_qgl',
                       'Jet_btagCSVV2',
                       'Jet_jetId',
+                      'run',
+                      'luminosityBlock',
+                      'event'
                      ]
     if USE_INFERENCE:
         branch_filter += [
@@ -503,6 +528,8 @@ def get_uproot_raw_query():
                       'Electron_mass',
                       'Muon_phi',
                       'Muon_mass',
+                      'run',
+                      'luminosityBlock',
                       'event',
         ]
     """
