@@ -589,6 +589,7 @@ if USE_DASK:
 else:
     executor = processor.FuturesExecutor(workers=utils.config["benchmarking"]["NUM_CORES"])
 
+uproot_options = None
 if USE_SERVICEX:
     treename = "servicex"
     uproot_options = {"encoded": True}
