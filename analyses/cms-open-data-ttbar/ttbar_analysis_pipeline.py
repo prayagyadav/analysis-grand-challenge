@@ -710,8 +710,133 @@ utils.file_output.save_histograms(all_histograms['hist_dict'], "histograms.root"
 if USE_INFERENCE:
     utils.file_output.save_histograms(all_histograms['ml_hist_dict'], "histograms_ml.root", add_offset=True)
 
+# %%
+# Save the histograms in a way that it is compatible with the Combine template and Datacard
+
+####### A few things changed:
+# Done i) Rebin histograms before saving into the root files
+# Done ii) Rename all _up/_down to Up/Down
+# Done iii) Rename all scaleup/scaleDown to scaleUp/scaleDown
+# Done iv) Rename pseudodata -> data_obs (Probably unnecessary?)
+# Done v) Copy the symmetric histograms to save both Up and Down variation separately
+# Done vi) Save the histogram in root files that are named appropriately with respect to the datacard being used
+
+
+# Derived from cabinetry_config.yml
+to_symmetrize = {
+    "_ME_var":("_ME_varUp","_ME_varDown"),
+    "_PS_var":("_PS_varUp","_PS_varDown"),
+    "_pt_scale_up":("_pt_scaleUp","_pt_scaleDown"),
+    "_pt_res_up":("_pt_resUp","_pt_resDown")
+}
+
+import uproot
+import copy
+
+# Seems like histogram arithmetics aren't working as expected
+# These are some workaround functions for that
+def hist_sub(h1, h2):
+    """Return h1 - h2 without using histogram arithmetic."""
+    out = copy.deepcopy(h1)
+
+    v1 = h1.view(flow=True)
+    v2 = h2.view(flow=True)
+    vo = out.view(flow=True)
+
+    vo.value[...] = v1.value - v2.value
+    vo.variance[...] = v1.variance + v2.variance
+
+    return out
+
+
+def hist_add(h1, h2):
+    """Return h1 + h2 without using histogram arithmetic."""
+    out = copy.deepcopy(h1)
+
+    v1 = h1.view(flow=True)
+    v2 = h2.view(flow=True)
+    vo = out.view(flow=True)
+
+    vo.value[...] = v1.value + v2.value
+    vo.variance[...] = v1.variance + v2.variance
+
+    return out
+
+
+def hist_abs(h):
+    """Return |h|."""
+    out = copy.deepcopy(h)
+
+    vo = out.view(flow=True)
+    vo.value[...] = np.abs(vo.value)
+    # variances unchanged
+
+    return out
+
+def save_histograms_individual_channel(histogram, filename, add_offset=False):
+    with uproot.recreate(filename) as f:
+        # save all available histograms to disk
+        # optionally add minimal offset to avoid completely empty bins
+        # (useful for the ML validation variables that would need binning adjustment
+        # to avoid those)
+        if add_offset:
+            histogram += 1e-6
+            # reference count for empty histogram with floating point math tolerance
+            empty_hist_yield = histogram.axes[0].size*(1e-6)*1.01
+        else:
+            empty_hist_yield = 0
+
+        for sample in histogram.axes[1]:
+            for variation in histogram[:, sample, :].axes[1]:
+                variation_string = "" if variation == "nominal" else f"_{variation}"
+                new_variation_string = variation_string
+                if "_up" in variation_string:
+                    new_variation_string = variation_string.replace('_up','Up')
+                elif "_down" in variation_string:
+                    new_variation_string = variation_string.replace('_down','Down')
+                elif "scaleup" in variation_string:
+                    new_variation_string = variation_string.replace('scaleup','scaleUp')
+                elif "scaledown" in variation_string:
+                    new_variation_string = variation_string.replace('scaledown','scaleDown')
+
+                current_1d_hist = histogram[:, sample, variation]
+                if sum(current_1d_hist.values()) > empty_hist_yield:
+                    # only save histograms containing events
+                    # many combinations are not used (e.g. ME var for W+jets)
+                    if variation_string in to_symmetrize.keys():
+                        nominal_hist = histogram[:, sample, "nominal"]
+                        up_string = to_symmetrize[variation_string][0]
+                        down_string = to_symmetrize[variation_string][1]
+                        up_hist = hist_add(current_1d_hist,hist_abs(hist_sub(nominal_hist, current_1d_hist)))
+                        down_hist = hist_sub(current_1d_hist,hist_abs(hist_sub(nominal_hist, current_1d_hist)))
+                        f[f"{sample}{up_string}"] = up_hist
+                        f[f"{sample}{down_string}"] = down_hist
+                    else:
+                        f[f"{sample}{new_variation_string}"] = current_1d_hist
+
+        # add pseudodata histogram if all inputs to it are available
+        if (
+            sum(histogram[:, "ttbar", "ME_var"].values()) > empty_hist_yield
+            and sum(histogram[:, "ttbar", "PS_var"].values()) > empty_hist_yield
+            and sum(histogram[:, "wjets", "nominal"].values()) > empty_hist_yield
+        ):
+            f[f"data_obs"] = (
+                histogram[:, "ttbar", "ME_var"] + histogram[:, "ttbar", "PS_var"]
+            ) / 2 + histogram[:, "wjets", "nominal"]
+
+
+# Save rebinned versions for use in combine; otherwise rebinning could be done with cabinetry
+rebinned_dict = {
+    ch: h[110j::hist.rebin(2), :,:]
+    for ch, h in all_histograms['hist_dict'].items()
+}
+
+channels = ['4j1b','4j2b']
+for channel in channels:
+    save_histograms_individual_channel(rebinned_dict[channel], f"all_histograms_fps4_bin{channel}.root")
+
 # %% [markdown]
-# ### Statistical inference
+# ### Statistical inference with Cabinetry and pyhf
 #
 # We are going to perform a re-binning for the statistical inference.
 # This is planned to be conveniently provided via cabinetry (see [cabinetry#412](https://github.com/scikit-hep/cabinetry/issues/412), but in the meantime we can achieve this via [template building overrides](https://cabinetry.readthedocs.io/en/latest/advanced.html#overrides-for-template-building).
