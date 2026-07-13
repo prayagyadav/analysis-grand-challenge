@@ -57,11 +57,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pyhf
 
+import utils  # contains code for bookkeeping and cosmetics, as well as some boilerplate
+
 import awkward
 import vector
 vector.register_awkward()
-
-import utils  # contains code for bookkeeping and cosmetics, as well as some boilerplate
 
 logging.getLogger("cabinetry").setLevel(logging.INFO)
 
@@ -711,6 +711,7 @@ if USE_INFERENCE:
     utils.file_output.save_histograms(all_histograms['ml_hist_dict'], "histograms_ml.root", add_offset=True)
 
 # %%
+import uproot
 # Save the histograms in a way that it is compatible with the Combine template and Datacard
 
 ####### A few things changed:
@@ -729,9 +730,6 @@ to_symmetrize = {
     "_pt_scale_up":("_pt_scaleUp","_pt_scaleDown"),
     "_pt_res_up":("_pt_resUp","_pt_resDown")
 }
-
-import uproot
-import copy
 
 # Seems like histogram arithmetics aren't working as expected
 # These are some workaround functions for that
@@ -820,7 +818,7 @@ def save_histograms_individual_channel(histogram, filename, add_offset=False):
             and sum(histogram[:, "ttbar", "PS_var"].values()) > empty_hist_yield
             and sum(histogram[:, "wjets", "nominal"].values()) > empty_hist_yield
         ):
-            f[f"data_obs"] = (
+            f["data_obs"] = (
                 histogram[:, "ttbar", "ME_var"] + histogram[:, "ttbar", "PS_var"]
             ) / 2 + histogram[:, "wjets", "nominal"]
 
