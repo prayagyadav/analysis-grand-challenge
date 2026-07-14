@@ -731,10 +731,9 @@ to_symmetrize = {
     "_pt_res_up":("_pt_resUp","_pt_resDown")
 }
 
-# Seems like histogram arithmetics aren't working as expected
-# These are some workaround functions for that
+# To perform histogram arithmetic on weighted histograms
 def hist_sub(h1, h2):
-    """Return h1 - h2 without using histogram arithmetic."""
+    """Return h1 - h2 for weighted histograms."""
     out = copy.deepcopy(h1)
 
     v1 = h1.view(flow=True)
@@ -748,7 +747,7 @@ def hist_sub(h1, h2):
 
 
 def hist_add(h1, h2):
-    """Return h1 + h2 without using histogram arithmetic."""
+    """Return h1 + h2 for weighted histograms."""
     out = copy.deepcopy(h1)
 
     v1 = h1.view(flow=True)
@@ -762,7 +761,7 @@ def hist_add(h1, h2):
 
 
 def hist_abs(h):
-    """Return |h|."""
+    """Return |h| for weighted histograms."""
     out = copy.deepcopy(h)
 
     vo = out.view(flow=True)
@@ -805,8 +804,8 @@ def save_histograms_individual_channel(histogram, filename, add_offset=False):
                         nominal_hist = histogram[:, sample, "nominal"]
                         up_string = to_symmetrize[variation_string][0]
                         down_string = to_symmetrize[variation_string][1]
-                        up_hist = hist_add(current_1d_hist,hist_abs(hist_sub(nominal_hist, current_1d_hist)))
-                        down_hist = hist_sub(current_1d_hist,hist_abs(hist_sub(nominal_hist, current_1d_hist)))
+                        up_hist = hist_add(nominal_hist,hist_abs(hist_sub(nominal_hist, current_1d_hist)))
+                        down_hist = hist_sub(nominal_hist,hist_abs(hist_sub(nominal_hist, current_1d_hist)))
                         f[f"{sample}{up_string}"] = up_hist
                         f[f"{sample}{down_string}"] = down_hist
                     else:
