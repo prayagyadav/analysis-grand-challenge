@@ -44,6 +44,7 @@
 import logging
 import time
 
+import uproot
 import awkward as ak
 import cabinetry
 import cloudpickle
@@ -711,7 +712,6 @@ if USE_INFERENCE:
     utils.file_output.save_histograms(all_histograms['ml_hist_dict'], "histograms_ml.root", add_offset=True)
 
 # %%
-import uproot
 # Save the histograms in a way that it is compatible with the Combine template and Datacard
 
 ####### A few things changed:
